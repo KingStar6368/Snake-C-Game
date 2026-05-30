@@ -1,0 +1,8 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="Snake/Snake.vcxproj" Id="d6fe414e-fc9a-4297-9526-3c2cbe25213d" />
+  <Project Path="TankiGame/TankiGame.vcxproj" Id="f35b03ad-0f69-4dff-8e9c-014f46aa2712" />
+</Solution>
