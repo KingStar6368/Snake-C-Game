@@ -3,12 +3,23 @@
 
 #include <iostream>
 #include <SFML/Graphics.hpp>
+#include <SFML/Network.hpp>
 #include <thread>
 #include <chrono>
 #include <filesystem>
 #include <sstream>
+
+struct SnakePlayer
+{
+	int score = 0;
+	double x, y;
+	double tailsx[100];
+	double tailsy[100];
+	int tailcount = 1;
+};
+SnakePlayer player;
 int score = 0;
-double x, y, fx,fy;
+double x, y, fx, fy;
 enum Dir
 {
 	Stop,
@@ -24,9 +35,12 @@ double tailsx[100];
 double tailsy[100];
 int tailcount = 1;
 
+sf::TcpSocket socketPlayer;
+bool Send = false;
+
 using namespace std;
 using namespace sf;
-void Draws(RenderWindow* window,Font& font) {
+void Draws(RenderWindow* window, Font& font) {
 	Vector2u windowsize = window->getSize();
 
 	RectangleShape wall;
@@ -41,13 +55,13 @@ void Draws(RenderWindow* window,Font& font) {
 
 	wall.setSize(Vector2f(10, windowsize.y));
 	wall1.setSize(Vector2f(10, windowsize.y));
-	wall2.setSize(Vector2f(windowsize.x,10));
-	wall3.setSize(Vector2f(windowsize.x,10));
+	wall2.setSize(Vector2f(windowsize.x, 10));
+	wall3.setSize(Vector2f(windowsize.x, 10));
 
 	wall.setPosition(Vector2f(0, 0));
 	wall1.setPosition(Vector2f(windowsize.x - 10, 0));
-	wall2.setPosition(Vector2f(0,0));
-	wall3.setPosition(Vector2f(0,windowsize.y - 10));
+	wall2.setPosition(Vector2f(0, 0));
+	wall3.setPosition(Vector2f(0, windowsize.y - 10));
 
 	window->draw(wall);
 	window->draw(wall1);
@@ -58,7 +72,7 @@ void Draws(RenderWindow* window,Font& font) {
 
 	CircleShape HSnake;
 	HSnake.setFillColor(Color(0, 255, 0));
-	HSnake.setPosition(Vector2f(x,y));
+	HSnake.setPosition(Vector2f(x, y));
 	HSnake.setRadius(10);
 
 	window->draw(HSnake);
@@ -104,7 +118,7 @@ void Inputs(RenderWindow* window) {
 			GameOver = true;
 		}
 		else if (const auto* keyp = event->getIf<Event::KeyPressed>()) {
-			if(keyp->scancode == Keyboard::Scancode::Escape || keyp->scancode == Keyboard::Scancode::X)
+			if (keyp->scancode == Keyboard::Scancode::Escape || keyp->scancode == Keyboard::Scancode::X)
 			{
 				GameOver = true;
 			}
@@ -126,7 +140,7 @@ void Inputs(RenderWindow* window) {
 void GameLogic(RenderWindow* window) {
 	double pervx = tailsx[0];
 	double pervy = tailsy[0];
-	double pervx2 ,pervy2;
+	double pervx2, pervy2;
 	tailsx[0] = x;
 	tailsy[0] = y;
 	for (int t = 1; t < tailcount; t++) {
@@ -141,16 +155,16 @@ void GameLogic(RenderWindow* window) {
 	switch (Direction)
 	{
 	case Up:
-		y-=10;
+		y -= 10;
 		break;
 	case Down:
-		y+=10;
+		y += 10;
 		break;
 	case Left:
-		x-=10;
+		x -= 10;
 		break;
 	case Right:
-		x+=10;
+		x += 10;
 		break;
 	}
 	if (tailcount > 1) {
@@ -163,7 +177,7 @@ void GameLogic(RenderWindow* window) {
 		}
 	}
 	//Score
-	double dis = sqrt(pow((x - fx),2)+pow((y - fy),2));
+	double dis = sqrt(pow((x - fx), 2) + pow((y - fy), 2));
 	if (dis < 10) {
 		score += 10;
 		fx = rand() % window->getSize().x;
@@ -173,6 +187,44 @@ void GameLogic(RenderWindow* window) {
 	//WallCheck
 	if (x < 10 || x > window->getSize().x || y < 10 || y > window->getSize().y) {
 		GameOver = true;
+	}
+}
+void SecendPlayer(RenderWindow* window,Font& font) {
+	if (Send)
+	{
+		sf::Packet sendpacket;
+		sendpacket << score << x << y << tailcount;
+		for (int t = 0; t < tailcount; t++) {
+			sendpacket << tailsx[t];
+			sendpacket << tailsy[t];
+		}
+		if (socketPlayer.send(sendpacket) != Socket::Status::Done) {
+			//error
+		}
+		sf::Packet recivepacket;
+		if (socketPlayer.receive(recivepacket) == Socket::Status::Done) {
+			recivepacket >> player.score >> player.x >> player.y >> player.tailcount;
+			for (int t = 0; t < player.tailcount; t++) {
+				recivepacket >> player.tailsx[t];
+				recivepacket >> player.tailsy[t];
+			}
+			//head
+			CircleShape shape;
+			shape.setRadius(10);
+			shape.setFillColor(Color(255, 255, 0));
+			shape.setPosition(Vector2f(player.x, player.y));
+			window->draw(shape);
+			//tail
+			shape.setRadius(8);
+			for (int t = 0; t < player.tailcount; t++) {
+				shape.setPosition(Vector2f(player.tailsx[t], player.tailsy[t]));
+				window->draw(shape);
+			}
+			//score
+			Text score(font);
+			score.setString("Player1 Score : " + player.score);
+			score.setFillColor(Color(255, 255, 0));
+		}
 	}
 }
 void InitWindow() {
@@ -188,10 +240,12 @@ void InitWindow() {
 	fy = rand() % window.getSize().y;
 	while (window.isOpen()) {
 		window.clear();
-		Draws(&window,font);
+		Draws(&window, font);
 		if (!GameOver) {
 			Inputs(&window);
 			GameLogic(&window);
+			if (Send)
+				SecendPlayer(&window,font);
 			window.display();
 		}
 		else {
@@ -203,6 +257,30 @@ void InitWindow() {
 
 int main()
 {
+	std::cout << "Did you want play Mulity ? " << endl;
+	std::cout << "1 = Host" << endl;
+	std::cout << "2 = Client" << endl;
+	std::cout << "other = offline" << endl;
+	char result = std::cin.get();
+	if (result == '1') {
+		//host
+		TcpListener socket;
+		if (socket.listen(8060) != Socket::Status::Done) {
+			//error
+		}
+		if (socket.accept(socketPlayer) != Socket::Status::Done) {
+			//error
+		}
+		Send = true;
+	}
+	else if (result == '2') {
+		//client
+		Socket::Status Status = socketPlayer.connect({ 127,0,0,1 }, 8060);
+		if (Status != Socket::Status::Done) {
+			//error
+		}
+		Send = true;
+	}
 	InitWindow();
 	std::cout << "Hello World!\n";
 }
