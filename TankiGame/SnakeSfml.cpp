@@ -122,16 +122,16 @@ void Inputs(RenderWindow* window) {
 			{
 				GameOver = true;
 			}
-			else if (keyp->scancode == Keyboard::Scancode::W) {
+			else if (keyp->scancode == Keyboard::Scancode::W && Direction != Dir::Down) {
 				Direction = Dir::Up;
 			}
-			else if (keyp->scancode == Keyboard::Scancode::S) {
+			else if (keyp->scancode == Keyboard::Scancode::S && Direction != Dir::Up) {
 				Direction = Dir::Down;
 			}
-			else if (keyp->scancode == Keyboard::Scancode::A) {
+			else if (keyp->scancode == Keyboard::Scancode::A && Direction != Dir::Right) {
 				Direction = Dir::Left;
 			}
-			else if (keyp->scancode == Keyboard::Scancode::D) {
+			else if (keyp->scancode == Keyboard::Scancode::D && Direction != Dir::Left) {
 				Direction = Dir::Right;
 			}
 		}
@@ -200,6 +200,7 @@ void SecendPlayer(RenderWindow* window,Font& font) {
 		}
 		if (socketPlayer.send(sendpacket) != Socket::Status::Done) {
 			//error
+			cout << "Send error";
 		}
 		sf::Packet recivepacket;
 		if (socketPlayer.receive(recivepacket) == Socket::Status::Done) {
@@ -222,9 +223,13 @@ void SecendPlayer(RenderWindow* window,Font& font) {
 			}
 			//score
 			Text score(font);
-			score.setString("Player1 Score : " + player.score);
+			score.setString("Player1 Score : " + to_string(player.score));
 			score.setFillColor(Color(255, 255, 0));
+			score.setPosition(Vector2f(10, 40));
+			window->draw(score);
 		}
+		else
+			cout << "recive error";
 	}
 }
 void InitWindow() {
@@ -254,6 +259,18 @@ void InitWindow() {
 		}
 	}
 }
+sf::IpAddress parseIP(const std::string& ipStr) {
+	int a, b, c, d;
+	char dot;
+	std::stringstream ss(ipStr);
+	ss >> a >> dot >> b >> dot >> c >> dot >> d;
+
+	if (ss.fail() || a < 0 || a > 255 || b < 0 || b > 255 || c < 0 || c > 255 || d < 0 || d > 255) {
+		return sf::IpAddress::LocalHost;
+	}
+
+	return sf::IpAddress(a, b, c, d);
+}
 
 int main()
 {
@@ -267,20 +284,41 @@ int main()
 		TcpListener socket;
 		if (socket.listen(8060) != Socket::Status::Done) {
 			//error
+			cout << "listen Error";
 		}
 		if (socket.accept(socketPlayer) != Socket::Status::Done) {
 			//error
+			cout << "accept error";
 		}
 		Send = true;
 	}
 	else if (result == '2') {
-		//client
-		Socket::Status Status = socketPlayer.connect({ 127,0,0,1 }, 8060);
-		if (Status != Socket::Status::Done) {
-			//error
+		// Client mode
+		std::string ipInput;
+		std::cout << "Enter server IP (e.g., 192.168.1.1): ";
+		std::cin.ignore(); // Clear newline
+		std::getline(std::cin, ipInput);
+
+		// Parse the IP string to 4 bytes
+		sf::IpAddress serverIP = parseIP(ipInput);
+
+		// Convert to string for display (using toString() not << operator)
+		std::cout << "Connecting to " << serverIP.toString() << ":8060..." << std::endl;
+
+		sf::Socket::Status status = socketPlayer.connect(serverIP, 8060);
+
+		if (status != sf::Socket::Status::Done) {
+			std::cerr << "Failed to connect to server!" << std::endl;
+			return 1;
 		}
+
+		std::cout << "Connected successfully!" << std::endl;
 		Send = true;
 	}
+	else {
+		std::cout << "Starting offline mode..." << std::endl;
+	}
+
 	InitWindow();
 	std::cout << "Hello World!\n";
 }
